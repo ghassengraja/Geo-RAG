@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # LLM
     GOOGLE_API_KEY: str
 
+    # Redis (Memory Checkpointing)
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     @property
     def database_url(self) -> str:
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"

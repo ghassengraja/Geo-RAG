@@ -170,6 +170,14 @@ services:
         condition: service_healthy
     
     
+  redis:
+    image: redis:alpine
+    container_name: redis
+    networks: ["mynet"]
+    ports:
+      - "6379:6379"
+    restart: always
+
 networks:
   mynet:
     name: mynet

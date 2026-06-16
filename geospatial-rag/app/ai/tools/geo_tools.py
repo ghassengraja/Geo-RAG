@@ -166,3 +166,6 @@ async def ingest_raster_data_tool(file_path: str, catalog_table: str, layer_name
         layer_name: The layer name to assign to the ingested raster data.
     """
     return await asyncio.to_thread(_run_raster_ingest_task, file_path, catalog_table, layer_name)
+
+
+geo_tools = [geospatial_calculation_tool, ingest_geospatial_data_tool, ingest_raster_data_tool]

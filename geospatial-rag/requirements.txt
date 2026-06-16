@@ -11,3 +11,5 @@ pgvector>=0.2.5
 sse-starlette>=2.0.0
 pyspark>=3.5.0
 python-dotenv>=1.0.0
+langgraph-supervisor
+langgraph-checkpoint-redis

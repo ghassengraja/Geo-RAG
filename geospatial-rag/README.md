@@ -1,46 +1,41 @@
-# Multi-Agent Geospatial RAG System
+# Geospatial RAG Application
 
-A state-of-the-art intelligent agent system capable of retrieving, ingesting, and analyzing large-scale geospatial data. It combines Large Language Models (LLMs) with LangGraph orchestrations and Big Data geospatial processing via Apache Spark and GeoMesa.
+A Multi-Agent AI system designed to analyze, interact with, and memorize Big Geospatial Data. It integrates a **LangGraph Supervisor** architecture with a robust big data backend (Apache Spark, Hadoop, HBase, GeoMesa, GeoTrellis) and a geospatial database (PostgreSQL/PostGIS + pgvector).
 
-## Architecture & Components
+## Architecture
 
-The platform operates using a containerized backend infrastructure while the Agent Orchestrator (FastAPI) runs on the host machine.
+### 1. Multi-Agent System (LangGraph)
+The AI is built on a Hub-and-Spoke (Star) topology orchestrated by `langgraph-supervisor`:
 
-### 1. Agent Orchestrator (FastAPI + LangGraph)
-- **Role:** The brain of the operation. It receives user prompts, interprets them using Google's Gemini models, and routes tasks to specialized tools.
-- **Tools:**
-  - `fetch_ltm_context_tool`: Interacts with PostGIS to retrieve Long-Term Memory (past chats, preferences, previous location context).
-  - `ingest_geospatial_data_tool`: Dynamically ingests files (like GeoJSON) directly into HBase by communicating with the Docker Daemon (`docker exec`).
-  - `geospatial_calculation_tool`: Initiates PySpark sessions to execute heavy `st_intersects` spatial queries over billions of points.
+- **Supervisor Agent (`app/ai/supervisor.py`):**
+  The central orchestrator. It receives user inputs, analyzes the intent, and delegates tasks to specialized sub-agents. It acts as the principal Geospatial Architect.
+  
+- **Geo Agent (`app/ai/agents.py`):**
+  A specialized data engineer agent.
+  - Submits heavy jobs to **Apache Spark**.
+  - Ingests vector data (GeoJSON) into **GeoMesa / HBase**.
+  - Ingests raster data (GeoTIFF) into **GeoTrellis / HBase** via GeoPySpark.
+  - Calculates intersections and feature counts at scale.
 
-### 2. Big Data Infrastructure (Dockerized)
-- **Hadoop & HBase (`hbase-master`, `namenode`, `datanode`):**
-  - Serves as the distributed data store for massive geospatial datasets.
-  - GeoMesa sits on top of HBase, converting complex geometries (polygons, lines, points) into Space-Filling Curves (Z-order indexing) for lightning-fast spatial queries.
-- **Apache Spark (`spark-master`, `spark-worker`):**
-  - The distributed computing engine. The FastAPI agent acts as the Spark Driver, dispatching spatial SQL queries (e.g. `SELECT count(*) WHERE st_intersects(...)`) to the Spark workers.
-- **PostgreSQL / PostGIS (`postgres`):**
-  - Stores the application state, user conversational history, and vectors for the RAG architecture.
+- **Memory Agent (`app/ai/agents.py`):**
+  An autonomous librarian agent for **Geospatial Episodic Memory**.
+  - Has tools to *search, add, update, and delete* facts.
+  - Maintains a database of deduplicated facts categorized by **Region and Place Name**.
+  - Employs a strict deduplication workflow to keep the database clean and relevant.
 
-## Workflow Pipeline
-1. **User Request:** "Ingest this tunisia.geojson file"
-2. **LLM Routing:** The LangGraph Supervisor recognizes an ingestion task and triggers the ingestion tool.
-3. **Execution:** The FastAPI agent fires a `docker exec` command to the `hbase-master` container to parse and ingest the GeoJSON using the GeoMesa CLI.
-4. **Follow-up Request:** "How many features intersect with point X?"
-5. **Spark Calculation:** The agent provisions an ephemeral Spark Session, loads the GeoMesa HBase catalog, and runs a distributed `st_intersects` query.
+### 2. State & Memory Management
+- **Short-Term Checkpointing:** We use **Redis** (`AsyncRedisSaver`) for fast, distributed storage of the immediate LangGraph message state.
+- **Long-Term Episodic Memory:** We use **PostgreSQL with PostGIS and pgvector** (`app/db/connection.py`). The Memory Agent uses Hybrid Search: Semantic distance filtering (via `pgvector`) combined with Spatial intersection (via `PostGIS GIST index`).
 
-## Prerequisites
-- **Python 3.12+** (managed via `uv`)
-- **Docker & Docker Compose**
-- **GeoMesa Spark Runtime Jar:** Required for PySpark to read from GeoMesa. Mapped to `/home/ghassen/Bureau/data/geomesa_jars/`.
+### 3. Backend Infrastructure (Docker)
+The system runs via `docker-compose`:
+- **Hadoop (Namenode & Datanode):** Underlying HDFS storage.
+- **Zookeeper & HBase (Master & RegionServer):** Distributed NoSQL storage for GeoMesa catalogs.
+- **Apache Spark (Master & Worker):** Distributed compute for spatial operations.
+- **PostgreSQL:** Handles the Episodic Memory using PostGIS geometries.
+- **Redis:** Serves as the LangGraph state Checkpointer.
 
-## Running the Application
-1. Start the infrastructure:
-   ```bash
-   docker-compose up -d
-   ```
-2. Start the Agent API:
-   ```bash
-   uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
-   ```
-3. Access the interactive Swagger UI at `http://localhost:8000/docs`.
+## Getting Started
+1. Boot up the infrastructure: `docker-compose up -d`
+2. Start the FastAPI server: `uv run uvicorn app.main:app --reload`
+3. Communicate via the `/chat` streaming endpoint or close the session via `/session/{session_id}/close`.

@@ -31,8 +31,9 @@ class DatabasePool:
             await conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS episodic_memory (
                     id SERIAL PRIMARY KEY,
-                    session_id VARCHAR(255) NOT NULL,
-                    summary TEXT NOT NULL,
+                    place_name VARCHAR(255) NOT NULL,
+                    fact TEXT NOT NULL,
+                    context TEXT,
                     embedding vector({settings.VECTOR_DIM}),
                     geom GEOMETRY(Geometry, 4326),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
