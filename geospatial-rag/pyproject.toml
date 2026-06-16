@@ -1,0 +1,22 @@
+[project]
+name = "geospatial-rag"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "asyncpg>=0.29.0",
+    "fastapi>=0.110.0",
+    "geopyspark>=0.4.3",
+    "langchain>=0.2.0",
+    "langchain-core>=0.2.0",
+    "langchain-google-genai>=1.0.0",
+    "langgraph>=0.2.0",
+    "pgvector>=0.2.5",
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.0",
+    "pyspark>=3.5.0",
+    "python-dotenv>=1.0.0",
+    "sse-starlette>=2.0.0",
+    "uvicorn>=0.28.0",
+]

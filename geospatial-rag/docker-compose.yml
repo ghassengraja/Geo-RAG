@@ -1,0 +1,179 @@
+version: "3"
+services:
+  namenode:
+    image: coomia/hadoop3.2-namenode:0.1
+    networks: ["mynet"]
+    volumes:
+      - /home/ghassen/Bureau/data:/datapc 
+      - /home/ghassen/Bureau/data/namenode:/hadoop/dfs/name
+    container_name: namenode
+    ports:
+      - 9870:9870
+      - 9000:9000
+    environment:
+      CLUSTER_NAME: geomesa-hbase-cluster
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      CORE_CONF_hadoop_http_staticuser_user: root
+      CORE_CONF_hadoop_proxyuser_hue_hosts: "*"
+      CORE_CONF_hadoop_proxyuser_hue_groups: "*"
+      CORE_CONF_io_compression_codecs: org.apache.hadoop.io.compress.SnappyCodec
+      HDFS_CONF_dfs_webhdfs_enabled: "true"
+      HDFS_CONF_dfs_permissions_enabled: "false"
+      HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check: "false"
+
+  datanode:
+    image: coomia/hadoop3.2-datanode:0.1
+    networks: ["mynet"]
+    container_name: datanode
+    volumes:
+      - /home/ghassen/Bureau/data:/datapc
+      - /home/ghassen/Bureau/data/datanode:/hadoop/dfs/data
+    ports:
+      - "9864:9864"
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      CORE_CONF_hadoop_http_staticuser_user: root
+      CORE_CONF_hadoop_proxyuser_hue_hosts: "*"
+      CORE_CONF_hadoop_proxyuser_hue_groups: "*"
+      CORE_CONF_io_compression_codecs: org.apache.hadoop.io.compress.SnappyCodec
+      HDFS_CONF_dfs_webhdfs_enabled: "true"
+      HDFS_CONF_dfs_permissions_enabled: "false"
+      HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check: "false"
+
+
+  zookeeper:
+    image: coomia/zookeeper:0.1
+    container_name: zookeeper
+    ports:
+      - 2181:2181
+    networks: ["mynet"]
+    depends_on:
+      - namenode
+      - datanode
+      
+  hbase-master:
+    image: ggraja/geomesa-hbase:1.1
+    container_name: hbase-master
+    networks: ["mynet"]
+    volumes:
+      - /home/ghassen/Bureau/data:/datapc
+      - /home/ghassen/Bureau/data/hbase:/opt/hbase-2.2.6/data
+    command: master
+    ports:
+      - 16000:16000
+      - 16010:16010
+    depends_on:
+      - zookeeper
+    environment:
+      HBASE_CONF_hbase_rootdir: hdfs://namenode:9000/hbase
+      HBASE_CONF_hbase_cluster_distributed: "true"
+      HBASE_CONF_hbase_zookeeper_quorum: zookeeper
+      HBASE_CONF_hbase_master: hbase-master:16000
+      HBASE_CONF_hbase_master_hostname: hbase-master
+      HBASE_CONF_hbase_master_port: 16000
+      HBASE_CONF_hbase_master_info_port: 16010
+      HBASE_CONF_hbase_regionserver_port: 16020
+      HBASE_CONF_hbase_regionserver_info_port: 16030
+      HBASE_MANAGES_ZK: "false"
+    
+
+
+      
+  hbase-regionserver:
+    image: ggraja/geomesa-hbase:1.1
+    container_name: hbase-regionserver
+    networks: ["mynet"]
+    volumes:
+      - /home/ghassen/Bureau/data:/datapc
+    command: regionserver
+    ports:
+      - 16030:16030
+      - 16020:16020
+      - 16301:16301
+    depends_on:
+      - zookeeper
+      - hbase-master
+    environment:
+      HBASE_CONF_hbase_rootdir: hdfs://namenode:9000/hbase
+      HBASE_CONF_hbase_cluster_distributed: "true"
+      HBASE_CONF_hbase_zookeeper_quorum: zookeeper
+      HBASE_CONF_hbase_master: hbase-master:16000
+      HBASE_CONF_hbase_master_hostname: hbase-master
+      HBASE_CONF_hbase_master_port: 16000
+      HBASE_CONF_hbase_master_info_port: 16010
+      HBASE_CONF_hbase_regionserver_port: 16020
+      HBASE_CONF_hbase_regionserver_info_port: 16030
+      HBASE_MANAGES_ZK: "false"
+
+  spark-master:
+    image: ggraja/geotrellis-spark-master:1.1
+    container_name: spark-master
+    ports:
+      - "8088:8080"
+      - "7077:7077"
+    environment:
+      - INIT_DAEMON_STEP=setup_spark
+    volumes:
+      - /home/ghassen/Bureau/data:/datapc
+    networks: ["mynet"]
+    depends_on:
+      - hbase-master
+      - hbase-regionserver
+      
+  spark-worker:
+    image: bde2020/spark-worker:3.0.1-hadoop3.2
+    container_name: spark-worker
+    ports:
+      - "8081:8081"
+    environment:
+      - "SPARK_MASTER=spark://spark-master:7077"
+    volumes:
+      - /home/ghassen/Bureau/data:/datapc
+    networks: ["mynet"]
+    depends_on:
+      - spark-master
+      - hbase-master
+      - hbase-regionserver
+  
+  postgres:
+    image: garapadev/postgres-postgis-pgvector
+    networks: ["mynet"]
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@jots.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    networks: ["mynet"]
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    
+    
+networks:
+  mynet:
+    name: mynet
+    external: true
+
+volumes:
+  postgres_data:

@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+env.bak/
+venv.bak/
+
+# Environment Variables
+.env
+.env.local
+
+# Data and persistent storage
+data/
+*.geojson
+*.tif
+*.csv
+*.tar.gz
+
+# Notes
+day1.txt
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
