@@ -1,31 +1,42 @@
-from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Request, File, Form, UploadFile
 from sse_starlette.sse import EventSourceResponse
 import json
 import logging
+import os
+import shutil
 
 from app.ai.supervisor import app_graph
 from langchain_core.messages import HumanMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
-
+from app.schemas import CloseSessionRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-class ChatRequest(BaseModel):
-    session_id: str
-    user_input: str
-
-class CloseSessionRequest(BaseModel):
-    pass # we get session_id from path
-
 @router.post("/agent/chat")
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(
+    session_id: str = Form(...),
+    user_input: str = Form(...),
+    file: UploadFile = File(None)
+):
     """
     Streams LangGraph execution events and LLM tokens via Server-Sent Events (SSE).
     """
-    config = {"configurable": {"thread_id": request.session_id}}
-    input_message = HumanMessage(content=request.user_input)
+    config = {"configurable": {"thread_id": session_id}}
+    
+    # Handle file upload
+    if file:
+        # Save to the data directory mapped to /datapc in docker-compose
+        upload_dir = "/home/ghassen/Bureau/data"
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, file.filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Inform the agent
+        user_input += f"\n\n[SYSTEM NOTE: The user uploaded a file named '{file.filename}'. It is saved on the host at '{file_path}'. If you are running tools inside a Docker container, the data directory is likely mounted at '/datapc', so use '/datapc/{file.filename}'.]"
+
+    input_message = HumanMessage(content=user_input)
 
     async def event_generator():
         try:

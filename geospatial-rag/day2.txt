@@ -1,0 +1,17 @@
+# Day 2: Geospatial RAG System - Raster Processing Stabilization
+
+## 1. Tool Refactoring & Offline Execution
+- **Removed Ivy Package Resolution:** Modified `raster_tools.py` to bypass `spark-shell --packages` network timeouts. The system now relies entirely on pre-downloaded offline JARs, vastly improving the reliability and speed of tool execution.
+- **Improved Error Handling:** Updated `raster_tools.py` to capture and relay the full `stdout/stderr` back to the LangGraph agent instead of swallowing Scala exceptions. This allows the LLM to autonomously detect, interpret, and resolve low-level Java/Scala stack traces (like `FileNotFoundException` and `NoClassDefFoundError`).
+
+## 2. Dependency Hell & Conflict Resolution (GeoTrellis vs GeoMesa)
+- **Offline Jar Injection:** Created a python script (`download_jars.py`) to systematically fetch exactly 15+ missing GeoTrellis, Monocle, and pureconfig JARs from Maven Central.
+- **HBase Client Injection:** Discovered that Spark needed the full HBase client library suite. Injected over 100 HBase JARs directly from the `hbase-master` container into the `spark-master` container using a docker-to-docker `tar` pipeline.
+- **Caffeine Cache Conflict:** Encountered a `java.lang.NoSuchMethodError: Caffeine.expireAfterWrite(Duration)` caused by an old shaded Caffeine library bundled inside the GeoMesa `geomesa-hbase-distributed-runtime-hbase2_2.12-3.5.2.jar`. Removed the conflicting fat jar and injected `caffeine-2.9.3.jar`, successfully harmonizing the GeoTrellis and GeoMesa JVM environments.
+
+## 3. Raster Data Ingestion & Metadata Retrieval
+- **Successful Ingestion:** The agent successfully executed `ingest_raster_data_tool` on a local GeoTIFF file (`R0040496_red.tif`), converting the raw TIF into a tiled Space-Filling Curve Z-order index inside the HBase distributed catalog.
+- **Metadata Retrieval:** The agent autonomously verified the ingestion by calling `get_raster_metadata_tool`, successfully extracting the `CRS`, `Extent`, `CellType`, and `Bounds` directly from the HBase Layer Metadata.
+
+## 4. Architectural Fixes
+- **Docker Volume Path Reconciliation:** Fixed a disconnect between the FastAPI `UploadFile` endpoints in `routes.py` and the `docker-compose.yml` volumes. Uploaded files are now saved directly to the host's `/home/ghassen/Bureau/data` folder, correctly mirroring the `/datapc` path inside all Big Data containers.

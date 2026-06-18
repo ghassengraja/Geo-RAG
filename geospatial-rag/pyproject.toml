@@ -19,6 +19,7 @@ dependencies = [
     "pydantic-settings>=2.2.0",
     "pyspark>=3.5.0",
     "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.32",
     "sse-starlette>=2.0.0",
     "uvicorn>=0.28.0",
 ]

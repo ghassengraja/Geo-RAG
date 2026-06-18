@@ -29,6 +29,8 @@ class Settings(BaseSettings):
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     class Config:
-        env_file = ".env"
+        import os
+        from pathlib import Path
+        env_file = str(Path(__file__).parent.parent / ".env")
 
 settings = Settings()

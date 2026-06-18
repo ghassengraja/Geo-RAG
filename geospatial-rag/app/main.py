@@ -4,6 +4,7 @@ import logging
 
 from app.api.routes import router as api_router
 from app.db.connection import DatabasePool
+from app.ai.supervisor import memory_saver
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -13,6 +14,7 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize the DB connection pool and schema
     logger.info("Starting up FastAPI Multi-Agent Geospatial RAG System...")
     await DatabasePool.init_pool()
+    await memory_saver.setup()
     
     yield
     
