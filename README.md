@@ -8,7 +8,7 @@ The platform operates using a containerized backend infrastructure while the Age
 
 ### 1. Agent Orchestrator (FastAPI + LangGraph)
 - **Role:** The brain of the operation. It receives user prompts, interprets them using Google's Generative AI models, and routes tasks to specialized sub-agents (`memory_agent` and `geo_agent`).
-- **Memory & State:** Uses `AsyncRedisSaver` (with Redis and RediSearch indices) for conversational LangGraph checkpointer memory, and PostGIS (`pgvector`) for storing episodic memory and semantic spatial context.
+- **Memory & State:** Uses `AsyncRedisSaver` for conversational LangGraph checkpointer memory, and PostGIS (`pgvector`) for Long-Term Episodic Memory. PostGIS acts as a fast spatial index and "Catalog Registry", storing semantic facts, bounding boxes, and a `metadata_payload` (JSON pointer) that links directly to massive datasets stored in HBase.
 - **Key Sub-Agent Tools:**
   - `search_episodic_memory` / `add_region_memory`: Interacts with PostGIS and pgvector to manage and retrieve Long-Term Episodic Memory (past chats, preferences, previous location context) through vector embeddings.
   - `ingest_geospatial_data_tool`: Ingests files (like GeoJSON) directly into HBase by orchestrating the GeoMesa CLI tools inside the Hadoop cluster.
@@ -29,12 +29,9 @@ The platform operates using a containerized backend infrastructure while the Age
   - Stores LangGraph conversational checkpoints.
 
 ## Workflow Pipeline
-1. **User Request:** "List available spatial files and ingest this tunisia.geojson file."
-2. **LLM Routing:** The LangGraph Supervisor interprets the request and triggers the `geo_agent`.
-3. **Listing Execution:** The `geo_agent` calls `list_spatial_files_tool`, which uses the GeoMesa CLI to query the HBase Zookeeper for existing tables.
-4. **Ingestion Execution:** The `geo_agent` calls `ingest_geospatial_data_tool`, which triggers the GeoMesa ingestion pipeline.
-5. **Follow-up Request:** "How many features intersect with point X?"
-6. **Spark Calculation:** The agent submits a PySpark script to the persistent Apache Livy session, loading the GeoMesa HBase catalog into a DataFrame and running a distributed `st_intersects` query in sub-seconds.
+1. **User Request:** "Calculate the vegetation index for the Sfax data I uploaded yesterday."
+2. **Context Retrieval:** The LangGraph Supervisor triggers the `memory_agent` (Context Engine) to semantically search PostGIS. It instantly retrieves the fact, the bounding box, and the `metadata_payload` pointing to the exact HBase catalog and layer name.
+3. **Heavy Workload Execution:** The Supervisor passes these metadata pointers to the `raster_agent` or `vector_agent` (Heavy Machinery). The agent dispatches a GeoTrellis Scala or PySpark job to Apache Livy, running the distributed computation directly over HBase without moving any data.
 
 ## Prerequisites
 - **Python 3.12+** (managed via `uv`)

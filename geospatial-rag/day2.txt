@@ -16,3 +16,9 @@
 ## 4. Architectural Fixes
 - **Docker Volume Path Reconciliation:** Fixed a disconnect between the FastAPI `UploadFile` endpoints in `routes.py` and the `docker-compose.yml` volumes. Uploaded files are now saved directly to the host's `/home/ghassen/Bureau/data` folder, correctly mirroring the `/datapc` path inside all Big Data containers.
 Finally, we fixed the Livy Scala version mismatch by upgrading Apache Livy to 0.8.0 (compiled for Scala 2.12), ensuring complete compatibility with the Spark 3.0.1 cluster. We also verified that Livy PySpark and Scala sessions stay warm, giving us sub-second execution times for all map algebra and geospatial calculations.
+
+## 5. PostGIS to HBase Metadata Mapping & Agent Orchestration
+- **Metadata Indexing:** Updated `episodic_memory` in PostGIS to include a `metadata_payload` JSONB column. PostGIS now acts as a lightweight spatial index and catalog registry, storing conversational facts, bounding boxes, and pointers to the heavy datasets residing in HBase.
+- **Strict Spatial Enforcement:** Updated `ltm_tools.py` and agent prompts to strictly enforce that the agent MUST extract and save the `geojson_geometry` (bounding box) for every file it interacts with.
+- **Optimized Distance Metric:** Switched `pgvector` distance calculations from Euclidean (`<->`) to Inner Product (`<#>`) for faster and more accurate retrieval with normalized Gemini embeddings.
+- **Orchestration Logic Refinement:** Rewrote the `supervisor.py` prompt to explicitly distinguish between the `memory_agent` (Context Engine) and the `vector`/`raster` agents (Heavy Machinery). The supervisor now autonomously chains them: retrieving semantic metadata pointers from PostGIS first, and passing them to Spark for heavy calculations.

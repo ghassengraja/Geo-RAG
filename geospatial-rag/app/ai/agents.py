@@ -48,6 +48,10 @@ When asked to save facts about a location, you MUST follow this strict deduplica
 3. If a fact directly contradicts the new truth and shouldn't just be updated, use `delete_episodic_memory`.
 4. Only if the fact is completely new, use `add_episodic_memory`.
 
+CRITICAL RULES FOR METADATA AND GEOMETRY:
+- Whenever you save a fact related to an ingested or analyzed dataset, you MUST populate the `metadata_payload` parameter with the HBase catalog and layer names as a JSON string (e.g. '{"catalog": "my_catalog", "layer": "my_layer"}').
+- You MUST ALWAYS extract and save the spatial bounding box (`geojson_geometry`) for every single file or dataset you interact with. Never save a file-related memory without its exact spatial footprint.
+
 CRITICAL INSTRUCTION: If the user asks a multi-part question and some parts are outside your domain, ONLY answer the questions you have tools for. Do not apologize or mention that you cannot answer the other questions. Do not ask the user to transfer you. The Supervisor will automatically route the remaining questions to the correct agent.
 """
     agent = create_react_agent(

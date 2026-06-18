@@ -36,17 +36,18 @@ async def search_episodic_memory(query: str, place_name: Optional[str] = None, g
         
     formatted_results = []
     for r in results:
+        payload_str = f"\nMetadata Payload: {r['metadata_payload']}" if r.get('metadata_payload') else ""
         formatted_results.append(
             f"ID: {r['id']} | Place: {r['place_name']} | Date: {r['created_at']}\n"
             f"Fact: {r['fact']}\n"
             f"Context: {r['context']}\n"
-            f"Geometry: {r['geom_json']}"
+            f"Geometry: {r['geom_json']}{payload_str}"
         )
         
     return "\n\n".join(formatted_results)
 
 @tool
-async def add_episodic_memory(place_name: str, fact: str, context: str, geojson_geometry: Optional[str] = None) -> str:
+async def add_episodic_memory(place_name: str, fact: str, context: str, geojson_geometry: Optional[str] = None, metadata_payload: Optional[str] = None) -> str:
     """
     Save a completely new fact or experience about a place to the episodic memory.
     Use this ONLY after searching to confirm the fact does not already exist.
@@ -55,7 +56,8 @@ async def add_episodic_memory(place_name: str, fact: str, context: str, geojson_
     place_name: The name of the region or place.
     fact: A concise statement of the fact.
     context: Detailed context or explanation surrounding the fact.
-    geojson_geometry: (Optional) A GeoJSON string representing the spatial footprint.
+    geojson_geometry: A GeoJSON string representing the spatial footprint. You MUST always provide this if interacting with spatial files.
+    metadata_payload: (Optional) A JSON string mapping this fact to a dataset in HBase (e.g. '{"catalog": "...", "layer": "..."}').
     """
     embeddings = _get_embeddings()
     text_to_embed = f"Place: {place_name}. Fact: {fact}. Context: {context}."
@@ -67,14 +69,15 @@ async def add_episodic_memory(place_name: str, fact: str, context: str, geojson_
             fact=fact, 
             context=context, 
             embedding=vector, 
-            geojson_geometry=geojson_geometry
+            geojson_geometry=geojson_geometry,
+            metadata_payload=metadata_payload
         )
         return f"Successfully saved NEW memory ID {new_id} for {place_name}."
     except Exception as e:
         return f"Failed to save memory: {str(e)}"
 
 @tool
-async def update_episodic_memory(memory_id: int, fact: str, context: str, geojson_geometry: Optional[str] = None) -> str:
+async def update_episodic_memory(memory_id: int, fact: str, context: str, geojson_geometry: Optional[str] = None, metadata_payload: Optional[str] = None) -> str:
     """
     Update an existing memory with new information.
     Use this when a previously saved fact has changed or needs more context.
@@ -83,7 +86,8 @@ async def update_episodic_memory(memory_id: int, fact: str, context: str, geojso
     memory_id: The ID integer of the memory to update (obtained from search_episodic_memory).
     fact: The updated concise statement of the fact.
     context: The updated detailed context.
-    geojson_geometry: (Optional) A GeoJSON string representing the updated spatial footprint.
+    geojson_geometry: A GeoJSON string representing the updated spatial footprint.
+    metadata_payload: (Optional) A JSON string mapping this fact to a dataset in HBase.
     """
     # Since we need place_name for good embedding but it's not passed, we embed the fact directly.
     embeddings = _get_embeddings()
@@ -96,7 +100,8 @@ async def update_episodic_memory(memory_id: int, fact: str, context: str, geojso
             fact=fact,
             context=context,
             embedding=vector,
-            geojson_geometry=geojson_geometry
+            geojson_geometry=geojson_geometry,
+            metadata_payload=metadata_payload
         )
         return f"Successfully UPDATED memory ID {memory_id}."
     except Exception as e:

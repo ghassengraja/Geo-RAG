@@ -48,8 +48,12 @@ class DatabasePool:
                     context TEXT,
                     embedding vector({settings.VECTOR_DIM}),
                     geom GEOMETRY(Geometry, 4326),
+                    metadata_payload JSONB,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
+                
+                -- Ensure column exists if table was already created
+                ALTER TABLE episodic_memory ADD COLUMN IF NOT EXISTS metadata_payload JSONB;
                 
                 -- Create spatial index (GiST)
                 CREATE INDEX IF NOT EXISTS episodic_memory_geom_idx 
