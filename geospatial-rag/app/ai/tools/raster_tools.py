@@ -1,11 +1,11 @@
 from langchain_core.tools import tool
-import subprocess
 import logging
+from app.livy_client import livy_client
 
 logger = logging.getLogger(__name__)
 
 @tool
-def ingest_raster_data_tool(file_path: str, catalog_table: str, layer_name: str) -> str:
+async def ingest_raster_data_tool(file_path: str, catalog_table: str, layer_name: str) -> str:
     """
     Sub-agent tool for ingesting raster data (like GeoTIFFs) into a distributed GeoTrellis catalog in HBase.
     Args:
@@ -68,25 +68,20 @@ writer.write[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](layerId, rdd, ZCur
 println("RASTER_INGESTION_SUCCESS")
   }}
 }}
-Script.run()
-sys.exit(0)
+// End of scala script
 """
     try:
-        cmd = ["docker", "exec", "-i", "spark-master", "/spark/bin/spark-shell", "--master", "local[*]"]
-        result = subprocess.run(cmd, input=scala_script, capture_output=True, text=True, check=True, timeout=300)
-        if "RASTER_INGESTION_SUCCESS\n" in result.stdout:
+        output = await livy_client.execute_scala_code(scala_script)
+        if "RASTER_INGESTION_SUCCESS" in output:
             return f"Successfully ingested raster {file_path} into HBase catalog {catalog_table} under layer {layer_name}."
         else:
-            return f"Raster ingestion might have failed. Output:\n{result.stdout}"
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Raster ingest failed: {e.stderr}")
-        return f"Error executing raster ingest: {e.stderr}\\n{e.stdout}"
+            return f"Raster ingestion might have failed. Output:\n{output}"
     except Exception as e:
         logger.error(f"Unexpected error during raster ingest: {e}")
         return f"Unexpected error during raster ingest: {str(e)}"
 
 @tool
-def retrieve_raster_tile_tool(catalog_table: str, layer_name: str, min_x: float, min_y: float, max_x: float, max_y: float, output_path: str) -> str:
+async def retrieve_raster_tile_tool(catalog_table: str, layer_name: str, min_x: float, min_y: float, max_x: float, max_y: float, output_path: str) -> str:
     """
     Sub-agent tool to extract a specific bounded spatial area from a massive ingested GeoTrellis raster layer.
     Args:
@@ -136,22 +131,20 @@ try {{
 }}
   }}
 }}
-Script.run()
-sys.exit(0)
+// End of scala script
 """
     try:
-        cmd = ["docker", "exec", "-i", "spark-master", "/spark/bin/spark-shell", "--master", "local[*]"]
-        result = subprocess.run(cmd, input=scala_script, capture_output=True, text=True, check=True, timeout=300)
-        if "RASTER_RETRIEVE_SUCCESS" in result.stdout.split("scala> println")[-1]:
+        output = await livy_client.execute_scala_code(scala_script)
+        if "RASTER_RETRIEVE_SUCCESS" in output:
             return f"Successfully retrieved cropped tile and saved to {output_path}."
         else:
-            return f"Failed to retrieve tile. Output:\n{result.stdout}"
+            return f"Failed to retrieve tile. Output:\n{output}"
     except Exception as e:
         logger.error(f"Error: {e}")
         return f"Error: {str(e)}"
 
 @tool
-def get_raster_metadata_tool(catalog_table: str, layer_name: str) -> str:
+async def get_raster_metadata_tool(catalog_table: str, layer_name: str) -> str:
     """
     Sub-agent tool to quickly retrieve the CRS, spatial extent, and cell resolution of an ingested GeoTrellis raster.
     Args:
@@ -188,23 +181,21 @@ try {{
 }}
   }}
 }}
-Script.run()
-sys.exit(0)
+// End of scala script
 """
     try:
-        cmd = ["docker", "exec", "-i", "spark-master", "/spark/bin/spark-shell", "--master", "local[*]"]
-        result = subprocess.run(cmd, input=scala_script, capture_output=True, text=True, check=True, timeout=300)
-        if "RASTER_METADATA_SUCCESS:\n" in result.stdout:
-            info = result.stdout.split("RASTER_METADATA_SUCCESS:\n")[-1].split("scala>")[0].strip()
+        output = await livy_client.execute_scala_code(scala_script)
+        if "RASTER_METADATA_SUCCESS" in output:
+            info = output.split("RASTER_METADATA_SUCCESS:\n")[-1].strip()
             return f"Raster Metadata:\n{info}"
         else:
-            return f"Failed to retrieve metadata. Output:\n{result.stdout}"
+            return f"Failed to retrieve metadata. Output:\n{output}"
     except Exception as e:
         logger.error(f"Error: {e}")
         return f"Error: {str(e)}"
 
 @tool
-def calculate_map_algebra_tool(catalog_table: str, layer_name: str, operation: str, value: float, output_layer_name: str) -> str:
+async def calculate_map_algebra_tool(catalog_table: str, layer_name: str, operation: str, value: float, output_layer_name: str) -> str:
     """
     Sub-agent tool to perform distributed pixel math (Local Map Algebra) across the cluster.
     Args:
@@ -262,16 +253,14 @@ writer.write[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](outLayerId, proces
 println("RASTER_MATH_SUCCESS")
   }}
 }}
-Script.run()
-sys.exit(0)
+// End of scala script
 """
     try:
-        cmd = ["docker", "exec", "-i", "spark-master", "/spark/bin/spark-shell", "--master", "local[*]"]
-        result = subprocess.run(cmd, input=scala_script, capture_output=True, text=True, check=True, timeout=300)
-        if "RASTER_MATH_SUCCESS\n" in result.stdout:
+        output = await livy_client.execute_scala_code(scala_script)
+        if "RASTER_MATH_SUCCESS" in output:
             return f"Successfully processed Map Algebra ({operation} {value}) and saved to layer '{output_layer_name}'."
         else:
-            return f"Failed to perform Map Algebra. Output:\n{result.stdout}"
+            return f"Failed to perform Map Algebra. Output:\n{output}"
     except Exception as e:
         logger.error(f"Error: {e}")
         return f"Error: {str(e)}"

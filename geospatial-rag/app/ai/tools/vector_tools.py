@@ -1,52 +1,37 @@
 from langchain_core.tools import tool
 import subprocess
 import logging
+from app.livy_client import livy_client
 
 logger = logging.getLogger(__name__)
 
 @tool
-def geospatial_calculation_tool(catalog_table: str, spatial_filter: str) -> str:
+async def geospatial_calculation_tool(catalog_table: str, spatial_filter: str) -> str:
     """
     Sub-agent tool for executing Geospatial calculations on HBase via GeoMesa CLI.
     Args:
         catalog_table: The HBase catalog table name containing the features.
         spatial_filter: A WKT (Well-Known Text) geometry string to filter by.
     """
-    logger.info(f"Running calculation on {catalog_table} with filter {spatial_filter}")
+    logger.info(f"Using Livy PySpark session for table: {catalog_table} with filter {spatial_filter}")
+    
+    code = f"""
+df = spark.read.format("geomesa") \\
+    .option("geomesa.data.store", "hbase") \\
+    .option("hbase.catalog", "{catalog_table}") \\
+    .option("hbase.zookeepers", "zookeeper") \\
+    .load()
+df.createOrReplaceTempView("geo_data")
+result = spark.sql("SELECT count(*) FROM geo_data WHERE st_intersects(geom, st_geomFromWKT('{spatial_filter}'))")
+print(result.collect()[0][0])
+"""
     try:
-        # First, get the feature type name from the catalog
-        cmd_get_feature = ["docker", "exec", "hbase-master", "geomesa-hbase", "get-type-names", "-c", catalog_table]
-        res_feat = subprocess.run(cmd_get_feature, capture_output=True, text=True, check=True)
-        
-        # Output usually contains the feature names, one per line. Let's take the first valid line.
-        lines = [line.strip() for line in res_feat.stdout.split("\n") if line.strip() and not "INFO" in line and not "WARN" in line]
-        if not lines:
-            return f"Error: Could not find any feature types in catalog {catalog_table}."
-        feature_name = lines[0]
-        
-        # Now run the export with the spatial filter
-        cmd_export = [
-            "docker", "exec", "hbase-master", "geomesa-hbase", "export",
-            "-c", catalog_table,
-            "-f", feature_name,
-            "-q", f"INTERSECTS(geom, {spatial_filter})",
-            "--no-header"
-        ]
-        res_export = subprocess.run(cmd_export, capture_output=True, text=True, check=True)
-        
-        # Count the number of features returned
-        features = [line for line in res_export.stdout.split("\n") if line.strip()]
-        count = len(features)
-        
-        return f"Successfully processed geospatial task. Found {count} features matching {spatial_filter} in {catalog_table}."
-        
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Calculation failed: {e.stderr}")
-        return f"Error executing geospatial task: {e.stderr}"
+        output = await livy_client.execute_code(code)
+        count = output.strip()
+        return f"Successfully processed geospatial task via Livy. Found {count} features matching {spatial_filter} in {catalog_table}."
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        return f"Unexpected error: {str(e)}"
-
+        logger.error(f"Livy job failed: {str(e)}")
+        return f"Error executing geospatial task via Livy: {str(e)}"
 
 @tool
 def ingest_geospatial_data_tool(file_path: str, catalog_table: str, feature_name: str) -> str:

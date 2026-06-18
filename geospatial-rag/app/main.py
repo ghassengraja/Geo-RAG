@@ -5,6 +5,7 @@ import logging
 from app.api.routes import router as api_router
 from app.db.connection import DatabasePool
 from app.ai.supervisor import memory_saver
+from app.livy_client import livy_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,10 +17,17 @@ async def lifespan(app: FastAPI):
     await DatabasePool.init_pool()
     await memory_saver.setup()
     
+    # Initialize the Global PySpark session via Livy
+    try:
+        await livy_client.init_session()
+    except Exception as e:
+        logger.error(f"Livy Initialization failed, but proceeding anyway: {e}")
+    
     yield
     
     # Shutdown: Close the pool cleanly
     logger.info("Shutting down...")
+    await livy_client.close()
     await DatabasePool.close_pool()
 
 app = FastAPI(

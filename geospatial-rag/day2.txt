@@ -15,3 +15,4 @@
 
 ## 4. Architectural Fixes
 - **Docker Volume Path Reconciliation:** Fixed a disconnect between the FastAPI `UploadFile` endpoints in `routes.py` and the `docker-compose.yml` volumes. Uploaded files are now saved directly to the host's `/home/ghassen/Bureau/data` folder, correctly mirroring the `/datapc` path inside all Big Data containers.
+Finally, we fixed the Livy Scala version mismatch by upgrading Apache Livy to 0.8.0 (compiled for Scala 2.12), ensuring complete compatibility with the Spark 3.0.1 cluster. We also verified that Livy PySpark and Scala sessions stay warm, giving us sub-second execution times for all map algebra and geospatial calculations.
