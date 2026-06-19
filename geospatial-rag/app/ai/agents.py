@@ -4,19 +4,26 @@ from app.ai.llm import get_model
 from app.ai.tools.vector_tools import vector_tools
 from app.ai.tools.raster_tools import raster_tools
 from app.ai.tools.ltm_tools import ltm_tools
+from app.ai.tools.rag_tools import search_documentation_tool
+from app.ai.tools.custom_tools import execute_custom_scala_job_tool
 
 def get_vector_agent(checkpointer=None):
     model = get_model()
     vector_prompt = """You are a specialized Geospatial Vector Big Data Agent.
 Your job is to run heavy calculation tasks using GeoMesa, ingest vector data (like GeoJSON) into HBase, list available spatial catalogs, and introspect vector data.
 You can use `describe_schema_tool` to get the CRS and attributes of a dataset, `get_feature_names_tool` to find layers inside a catalog, `analyze_stats_tool` to get bounding boxes and counts, and `export_spatial_data_tool` to sample data.
+
+CRITICAL WORKFLOW: The GeoMesa CLI is complex. To discover available commands or parameters for a command, you MUST use the `geomesa_cli_help_tool`. It is highly intuitive: run it without arguments to see all commands, and run it with a command name (e.g., 'ingest') to see its parameters. Use this instead of guessing parameters.
+
+If you need to perform a custom task that your standard tools cannot handle, FIRST use `search_documentation_tool` to look up the correct GeoTrellis/GeoMesa syntax. Then, write the custom Scala code and execute it using `execute_custom_scala_job_tool`.
+
 Use the appropriate tool for the job. Do not make assumptions about data paths or schemas, use your introspection tools to verify them first.
 
 CRITICAL INSTRUCTION: If the user asks a multi-part question and some parts are outside your domain, ONLY answer the questions you have tools for. Do not apologize or mention that you cannot answer the other questions. Do not ask the user to transfer you. The Supervisor will automatically route the remaining questions to the correct agent.
 """
     agent = create_react_agent(
         model=model,
-        tools=vector_tools,
+        tools=vector_tools + [search_documentation_tool, execute_custom_scala_job_tool],
         prompt=vector_prompt,
         checkpointer=checkpointer
     )
@@ -27,13 +34,16 @@ def get_raster_agent(checkpointer=None):
     raster_prompt = """You are a specialized Geospatial Raster Big Data Agent.
 Your job is to ingest raster data (like GeoTIFFs) into a distributed GeoTrellis catalog in HBase and perform raster-based operations using Spark.
 You can use `get_raster_metadata_tool` to check a raster's CRS and bounds, `retrieve_raster_tile_tool` to crop out a specific bounding box and export it, and `calculate_map_algebra_tool` to run distributed pixel math (like thresholding).
+
+If you need to perform a custom task that your standard tools cannot handle, FIRST use `search_documentation_tool` to look up the correct GeoTrellis syntax. Then, write the custom Scala code and execute it using `execute_custom_scala_job_tool`.
+
 Use the appropriate tool for the job. Do not make assumptions about data paths, use the ones provided.
 
 CRITICAL INSTRUCTION: If the user asks a multi-part question and some parts are outside your domain, ONLY answer the questions you have tools for. Do not apologize or mention that you cannot answer the other questions. Do not ask the user to transfer you. The Supervisor will automatically route the remaining questions to the correct agent.
 """
     agent = create_react_agent(
         model=model,
-        tools=raster_tools,
+        tools=raster_tools + [search_documentation_tool, execute_custom_scala_job_tool],
         prompt=raster_prompt,
         checkpointer=checkpointer
     )

@@ -167,5 +167,23 @@ def analyze_stats_tool(catalog_table: str, feature_name: str, stat_type: str = "
         logger.error(f"Stats analysis failed: {e.stderr}")
         return f"Failed to analyze stats. Error: {e.stderr}"
 
+@tool
+def geomesa_cli_help_tool(command: str = "") -> str:
+    """
+    Sub-agent tool to run 'geomesa-hbase help' to introspect available CLI commands and their parameters.
+    Args:
+        command: (Optional) The specific geomesa-hbase subcommand to get help on (e.g. 'ingest', 'export'). Leave empty to see all commands.
+    """
+    logger.info(f"Running geomesa-hbase help {command}...")
+    try:
+        cmd = ["docker", "exec", "hbase-master", "geomesa-hbase", "help"]
+        if command:
+            cmd.append(command)
+            
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return f"GeoMesa CLI Help Output:\n{result.stdout}"
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Help command failed: {e.stderr}")
+        return f"Failed to get help. Error: {e.stderr}"
 
-vector_tools = [geospatial_calculation_tool, ingest_geospatial_data_tool, list_spatial_files_tool, describe_schema_tool, get_feature_names_tool, export_spatial_data_tool, analyze_stats_tool]
+vector_tools = [geospatial_calculation_tool, ingest_geospatial_data_tool, list_spatial_files_tool, describe_schema_tool, get_feature_names_tool, export_spatial_data_tool, analyze_stats_tool, geomesa_cli_help_tool]

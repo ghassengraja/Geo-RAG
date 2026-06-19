@@ -1,0 +1,17 @@
+# Day 3: Geospatial RAG System - Advanced Agent Topologies & "Freedom" Architecture
+
+## 1. Nested Supervisor Topology
+- **Master Orchestrator:** Refactored `supervisor.py` to act solely as a Master Orchestrator, routing to either the `memory_agent` (Context Engine) or the new `geosupervisor`.
+- **GeoSupervisor (Heavy Machinery Orchestrator):** Created a nested LangGraph supervisor that specializes purely in differentiating between Vector and Raster workloads, automatically routing down to the `raster_agent` and `vector_agent`.
+- **Clean Chain of Command:** This hub-and-spoke separation of concerns drastically improves prompt adherence, as the supervisors do not execute tools and the workers (`raster`/`vector` agents) do not have to make routing decisions.
+
+## 2. Decoupling Scala Logic (Templates)
+- **Code Organization:** Moved hardcoded Scala strings out of the Python tools and into isolated `.scala` files inside `app/ai/tools/scala_templates/`.
+- **Dynamic Loading:** Created a `load_scala_template` utility to inject dynamic variables (like `file_path` or `catalog_table`) into the raw Scala templates at runtime before dispatching them to Livy.
+
+## 3. The "Freedom" Architecture (ChromaDB Documentation RAG)
+- **Agent Limitations:** Previously, agents were limited to executing pre-built templates. They could not write custom GeoTrellis/GeoMesa code without hallucinating the complex APIs.
+- **Documentation Ingestion:** Created a standalone `ingest_docs.py` script. It parses the GeoTrellis/GeoMesa PDF documentation, batches the Google Gemini embeddings (respecting free-tier rate limits), and stores them into a persistent, local `ChromaDB` vector store (`/data/chroma_db`).
+- **Retrieval Tool (`search_documentation_tool`):** Built a LangChain `@tool` allowing the agents to autonomously query the ChromaDB vector store when faced with a custom user request to learn the correct syntax.
+- **Execution Tool (`execute_custom_scala_job_tool`):** Built a highly privileged execution tool that allows agents to take the syntax they just learned, synthesize a custom Scala script, and execute it directly on the Spark cluster via Apache Livy.
+- **Self-Healing Loop:** The execute tool returns actual Java/Scala stdout and stack traces back to the agent. If the generated code fails, the agent will autonomously query the documentation again, fix its code, and resubmit until successful.
