@@ -6,32 +6,61 @@ A state-of-the-art intelligent agent system capable of retrieving, ingesting, an
 
 The platform operates using a containerized backend infrastructure while the Agent Orchestrator (FastAPI) runs on the host machine via `uv`.
 
-### 1. Agent Orchestrator (FastAPI + LangGraph)
-- **Role:** The brain of the operation. It receives user prompts, interprets them using Google's Generative AI models, and routes tasks to specialized sub-agents (`memory_agent` and `geo_agent`).
-- **Memory & State:** Uses `AsyncRedisSaver` for conversational LangGraph checkpointer memory, and PostGIS (`pgvector`) for Long-Term Episodic Memory. PostGIS acts as a fast spatial index and "Catalog Registry", storing semantic facts, bounding boxes, and a `metadata_payload` (JSON pointer) that links directly to massive datasets stored in HBase.
-- **Key Sub-Agents & Tools:**
-  - `geosupervisor`: A nested supervisor orchestrator that sits beneath the Master Supervisor. It exclusively handles routing complex spatial data payloads down to either the `raster_agent` or `vector_agent`.
-  - `search_episodic_memory` / `add_region_memory`: Interacts with PostGIS and pgvector to manage and retrieve Long-Term Episodic Memory (past chats, preferences, previous location context) through vector embeddings.
-  - `search_documentation_tool`: A standalone RAG retrieval tool pointing to a local ChromaDB instance containing library documentation (GeoTrellis/GeoMesa).
-  - `execute_custom_scala_job_tool`: A highly privileged execution tool that allows agents to synthesize and execute custom Scala code dynamically on the Spark cluster.
-  - `ingest_geospatial_data_tool`: Ingests files (like GeoJSON) directly into HBase by orchestrating the GeoMesa CLI tools inside the Hadoop cluster.
-  - `geospatial_calculation_tool`: Executes heavy distributed `st_intersects` spatial queries over massive datasets stored in HBase via the Apache Livy REST API (PySpark).
-  - `ingest_raster_data_tool`: Natively ingests GeoTIFF files into HBase using GeoTrellis, submitted as Scala jobs to Spark via Apache Livy.
-  - `get_raster_metadata_tool`: Retrieves CRS, Extent, and CellType metadata for raster layers directly from the GeoTrellis catalog via Apache Livy.
-  - `list_spatial_files_tool`: Uses GeoMesa CLI to list all currently available spatial catalogs and tables.
+### Mermaid Architecture Diagram
+
+```mermaid
+graph TD
+    User([User Prompt]) --> API[FastAPI / Agent Orchestrator]
+    API --> MasterSupervisor{Master Supervisor}
+    
+    subgraph Agents [LangGraph Sub-Agents]
+        MasterSupervisor -->|Context queries| MemoryAgent[memory_agent<br/>Context Engine]
+        MasterSupervisor -->|Heavy workloads| GeoSupervisor{geosupervisor<br/>Heavy Machinery Orchestrator}
+        
+        GeoSupervisor -->|Vector data operations| VectorAgent[vector_agent<br/>Vector Big Data Agent]
+        GeoSupervisor -->|Raster data operations| RasterAgent[raster_agent<br/>Raster Big Data Agent]
+    end
+
+    subgraph Memory & State
+        MemoryAgent -->|Semantic search & facts| PostGIS[(PostgreSQL/PostGIS + pgvector)]
+        API -->|Checkpoints| Redis[(Redis)]
+        VectorAgent -.->|Docs retrieval| ChromaDB[(ChromaDB)]
+        RasterAgent -.->|Docs retrieval| ChromaDB
+    end
+
+    subgraph Big Data Infrastructure
+        VectorAgent -->|Spatial calculations| Livy[Apache Livy]
+        RasterAgent -->|GeoTrellis Scala jobs| Livy
+        
+        Livy --> SparkCluster((Apache Spark Cluster))
+        SparkCluster <--> HBase[(Hadoop/HBase + GeoMesa)]
+    end
+```
+
+### 1. Agents, Sub-Agents, and Tools (LangGraph Orchestration)
+
+- **Master Supervisor**: The brain of the operation. It receives user prompts, interprets them using Google's Gemini models, and routes tasks to the `memory_agent` or the `geosupervisor`.
+- **`memory_agent` (Context Engine)**: Maintains a database of facts about Regions and Places. Routes contextual questions and deduplicates data.
+  - *Tools:* `search_episodic_memory`, `update_episodic_memory`, `delete_episodic_memory`, `add_episodic_memory`.
+- **`geosupervisor` (Heavy Machinery Orchestrator)**: A nested supervisor that manages the heavy data processing workflows, routing tasks between the `vector_agent` and `raster_agent`.
+  - **`vector_agent`**: Handles heavy spatial workloads and Big Data operations using GeoMesa (e.g., Shapefiles, GeoJSON, intersections).
+    - *Tools:* `geomesa_cli_help_tool`, `describe_schema_tool`, `get_feature_names_tool`, `analyze_stats_tool`, `export_spatial_data_tool`, `search_documentation_tool`, `execute_custom_scala_job_tool`.
+  - **`raster_agent`**: Handles heavy raster pixel operations using GeoTrellis/Spark (e.g., GeoTIFFs, map algebra, vegetation indices).
+    - *Tools:* `get_raster_metadata_tool`, `retrieve_raster_tile_tool`, `calculate_map_algebra_tool`, `search_documentation_tool`, `execute_custom_scala_job_tool`.
 
 ### 2. Big Data Infrastructure (Dockerized)
-- **Hadoop & HBase (`hbase-master`, `namenode`, `datanode`):**
+
+- **Hadoop & HBase (`hbase-master`, `namenode`, `datanode`)**:
   - Serves as the distributed data store for massive geospatial datasets.
   - GeoMesa sits on top of HBase, converting complex geometries (polygons, lines, points) into Space-Filling Curves (Z-order indexing) for lightning-fast spatial queries.
-- **Apache Spark & Livy (`spark-master`, `spark-worker`):**
+- **Apache Spark & Livy (`spark-master`, `spark-worker`)**:
   - The distributed computing engine. The FastAPI agent acts as a REST client to Apache Livy 0.8.0 (running in the `spark-master`), dispatching spatial SQL and GeoTrellis Scala scripts. This entirely decoupled design prevents Python 3.12/PySpark version mismatches and eliminates JVM startup overhead.
-- **PostgreSQL / PostGIS (`postgres`):**
-  - Stores the conversational history, episodic facts, and generates embeddings for the RAG architecture using `pgvector`.
-- **ChromaDB (Local):**
+- **PostgreSQL / PostGIS (`postgres`)**:
+  - Stores Long-Term Episodic Memory (facts, bounding boxes) and metadata payloads. Uses `pgvector` for semantic search/RAG embeddings.
+- **ChromaDB (Local)**:
   - Stores specialized documentation embeddings for API introspection, completely separate from the episodic conversational memory stored in PostGIS.
-- **Redis (`redis`):**
-  - Stores LangGraph conversational checkpoints.
+- **Redis (`redis`)**:
+  - Stores LangGraph conversational checkpoints for fast session resumption (`AsyncRedisSaver`).
 
 ## Workflow Pipeline
 1. **User Request:** "Calculate the vegetation index for the Sfax data I uploaded yesterday."
